@@ -1,4 +1,22 @@
-# Auto Downloader (Split Support)
+# 🌌 Universal Cloud Grabber ✨
+
+Paste a link in `GIMME_LINK.txt` (Video, GitHub Repo, or a Website) and I will fetch the files!
+
+## 📦 Current Downloads
+| File Name | Size | Link |
+| :--- | :--- | :--- |
+<!-- TABLE_START -->
+<!-- TABLE_END -->
+
+---
+
+### 🛠️ Join Commands
+If a file is split into `.1, .2, .3`, use these to fix it:
+
+#### 🐧 Linux / 🍎 Mac / 🤖 Android (Termux)
+<!-- LINUX_CMD -->
+```bash
+# Waiting for files...# Auto Downloader (Split Support)
 
 Put a link in `download.txt` to trigger a download.
 
