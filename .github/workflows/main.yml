@@ -1,1 +1,84 @@
+name: Auto Downloader Splitter
+on:
+  push:
+    paths:
+      - 'download.txt'
+  workflow_dispatch:
 
+jobs:
+  download_and_split:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install yt-dlp
+
+      - name: Download File
+        id: dl
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          URL=$(cat download.txt | xargs)
+          mkdir -p downloads
+          # Clear previous downloads to save repo space
+          rm -rf downloads/*
+          
+          # 1. GitHub Repo
+          if [[ $URL =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$ ]]; then
+            gh release download --repo "$URL" --archive zip --output "downloads/repo-source.zip"
+          # 2. YouTube
+          elif [[ $URL == *"youtube.com"* ]] || [[ $URL == *"youtu.be"* ]]; then
+            yt-dlp -f 'best' -o "downloads/video.mp4" "$URL"
+          # 3. Direct Link
+          else
+            cd downloads && { curl -LJO "$URL" ; cd ..; }
+          fi
+
+          # Get the filename
+          RAW_FILE=$(ls downloads/* | head -n 1)
+          echo "orig_file=$RAW_FILE" >> $GITHUB_OUTPUT
+
+      - name: Split and Clean
+        id: split
+        run: |
+          FILE="${{ steps.dl.outputs.orig_file }}"
+          SIZE=$(stat -c%s "$FILE")
+          
+          if [ $SIZE -gt 94371840 ]; then # If larger than 90MB
+            echo "File is large, splitting..."
+            split -b 90M "$FILE" "${FILE}.part_"
+            rm "$FILE" # Remove the original large file
+            echo "is_split=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_split=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update README and Commit
+        run: |
+          # Generate links for all files in downloads folder
+          FILES=$(ls downloads/)
+          LINK_LIST=""
+          
+          for f in $FILES; do
+            ENCODED_NAME=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$f'))")
+            LINK="https://raw.githubusercontent.com/${{ github.repository }}/main/downloads/$ENCODED_NAME"
+            LINK_LIST="$LINK_LIST\n- [$f]($LINK)"
+          done
+
+          # Update README markers
+          sed -i '/<!-- DOWNLOAD_SECTION_START -->/,/<!-- DOWNLOAD_SECTION_END -->/{ /<!-- DOWNLOAD_SECTION_START -->/b; /<!-- DOWNLOAD_SECTION_END -->/b; d; }' README.md
+          sed -i "/<!-- DOWNLOAD_SECTION_START -->/a $LINK_LIST" README.md
+          
+          # Git Push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add downloads/ README.md
+          git commit -m "Add downloaded files"
+          git push --force
